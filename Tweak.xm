@@ -2043,6 +2043,8 @@ static NSString *buildBotFEN(UIView *board, int *outUserColor) {
             if (whiteMoved > 0 && blackMoved == 0)      gBotSide = 1;
             else if (blackMoved > 0 && whiteMoved == 0) gBotSide = 0;
 
+        } else {
+            gBotSide = flipped ? 1 : 0;
         }
         memcpy(gPrevBotBoard, bd, sizeof(bd));
         gHavePrevBoard = YES;
@@ -2075,7 +2077,8 @@ static BOOL processBotBoard(UIView *board) {
     for (int pd = 0; pd < 14 && pr; pd++) {
         NSString *cn = NSStringFromClass([pr class]);
         if ([cn containsString:@"PlayBot"] || [cn containsString:@"Coach"] ||
-            [cn containsString:@"Lesson"]) { inBotGame = YES; break; }
+            [cn containsString:@"Lesson"] || [cn containsString:@"Puzzle"] ||
+            [cn containsString:@"Tactics"]) { inBotGame = YES; break; }
         pr = [pr nextResponder];
     }
     if (!inBotGame) return NO;
