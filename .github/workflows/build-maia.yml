@@ -43,6 +43,7 @@ jobs:
           mkdir -p "layout/Library/Application Support/Chess"
           gh release download maia-model --repo "${{ github.repository }}" --pattern "maia3_5m.mlpackage.zip" --output model.zip
           unzip -q model.zip -d "layout/Library/Application Support/Chess"
+          chmod -R a+rX "layout/Library/Application Support/Chess"
           find "layout/Library/Application Support/Chess" -maxdepth 2 -print
 
       - name: Setup Theos

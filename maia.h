@@ -5,6 +5,8 @@ typedef struct MaiaResult {
     double winPct;
     double whiteEval;
     bool ok;
+    int stage;
+    int legalCount;
 } MaiaResult;
 
 typedef void (^MaiaResultBlock)(MaiaResult res);

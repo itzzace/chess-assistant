@@ -157,8 +157,10 @@ extern "C" void MaiaGo(const char *fen, int selfElo, int oppoElo, MaiaResultBloc
     res.winPct = 0;
     res.whiteEval = 0;
     res.ok = false;
+    res.stage = 0;
+    res.legalCount = 0;
 
-    if (!gMaiaModel) { if (done) done(res); return; }
+    if (!gMaiaModel) { res.stage = 1; if (done) done(res); return; }
 
     std::string fenStr(fen);
     int sideBlack = 0;
@@ -168,13 +170,14 @@ extern "C" void MaiaGo(const char *fen, int selfElo, int oppoElo, MaiaResultBloc
 
     char legalBuf[256 * 6];
     int legalCount = StockfishLegalMoves(fen, legalBuf, 256);
-    if (legalCount <= 0) { if (done) done(res); return; }
+    res.legalCount = legalCount;
+    if (legalCount <= 0) { res.stage = 2; if (done) done(res); return; }
 
     @autoreleasepool {
         MLMultiArray *tokens = buildTokens(fen, sideBlack);
         MLMultiArray *se = scalarInt32(selfElo);
         MLMultiArray *oe = scalarInt32(oppoElo);
-        if (!tokens || !se || !oe) { if (done) done(res); return; }
+        if (!tokens || !se || !oe) { res.stage = 3; if (done) done(res); return; }
 
         NSDictionary *feats = @{
             @"tokens": [MLFeatureValue featureValueWithMultiArray:tokens],
@@ -184,14 +187,14 @@ extern "C" void MaiaGo(const char *fen, int selfElo, int oppoElo, MaiaResultBloc
         NSError *err = nil;
         MLDictionaryFeatureProvider *prov =
             [[MLDictionaryFeatureProvider alloc] initWithDictionary:feats error:&err];
-        if (!prov || err) { if (done) done(res); return; }
+        if (!prov || err) { res.stage = 4; if (done) done(res); return; }
 
         id<MLFeatureProvider> out = [gMaiaModel predictionFromFeatures:prov error:&err];
-        if (!out || err) { if (done) done(res); return; }
+        if (!out || err) { res.stage = 5; if (done) done(res); return; }
 
         MLMultiArray *moveLogits = [out featureValueForName:@"move_logits"].multiArrayValue;
         MLMultiArray *valueLogits = [out featureValueForName:@"value_logits"].multiArrayValue;
-        if (!moveLogits) { if (done) done(res); return; }
+        if (!moveLogits) { res.stage = 6; if (done) done(res); return; }
 
         int bestIdx = -1;
         double bestVal = -1e30;
@@ -204,7 +207,7 @@ extern "C" void MaiaGo(const char *fen, int selfElo, int oppoElo, MaiaResultBloc
             double v = [[moveLogits objectAtIndexedSubscript:idx] doubleValue];
             if (v > bestVal) { bestVal = v; bestIdx = idx; }
         }
-        if (bestIdx < 0) { if (done) done(res); return; }
+        if (bestIdx < 0) { res.stage = 7; if (done) done(res); return; }
 
         std::string modelBest = gMoves[bestIdx];
         std::string realBest = sideBlack ? mirrorUci(modelBest) : modelBest;
@@ -225,6 +228,7 @@ extern "C" void MaiaGo(const char *fen, int selfElo, int oppoElo, MaiaResultBloc
             stmScore = (winP - lossP) * 4.0;
         }
         res.whiteEval = sideBlack ? -stmScore : stmScore;
+        res.stage = 100;
         res.ok = true;
     }
 
