@@ -1,0 +1,10 @@
+Package: com.chess.assistant
+Name: Chess Assistant
+Depends: mobilesubstrate
+Version: 2.0
+Architecture: iphoneos-arm64
+Description: ELO-capped chess move assistant using Lichess cloud eval.
+             Set strength from 800 to 2400 ELO via in-game menu.
+Maintainer: you
+Author: you
+Section: Tweaks

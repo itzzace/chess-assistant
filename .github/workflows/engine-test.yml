@@ -1,0 +1,74 @@
+name: Engine Build Test
+
+on:
+  push:
+    branches: [ v2-engine ]
+  workflow_dispatch:
+
+jobs:
+  stockfish:
+    runs-on: macos-latest
+    steps:
+      - name: Clone Stockfish 16
+        run: |
+          git clone --depth 1 --branch sf_16 https://github.com/official-stockfish/Stockfish.git sf
+          cd sf && echo "Stockfish:" && git describe --tags && git log -1 --oneline
+
+      - name: Inspect Stockfish net configuration
+        run: |
+          cd sf/src
+          echo "=== net default names referenced in source ==="
+          grep -runE 'EvalFileDefaultName(Big|Small)?\s' . | grep -iE 'define|=' | head -20 || true
+          grep -ruoE 'nn-[0-9a-f]+\.nnue' . | sort -u || true
+          echo "=== what 'make net' fetches ==="
+          make net
+          echo "=== all .nnue files + sizes ==="
+          ls -la *.nnue
+          echo "=== total embedded net bytes ==="
+          du -ch *.nnue | tail -1
+
+      - name: Cross-compile sources directly for iOS arm64
+        run: |
+          cd sf/src
+          SDK=$(xcrun -sdk iphoneos --show-sdk-path)
+          CXX=$(xcrun -sdk iphoneos -f clang++)
+          echo "SDK=$SDK"; echo "CXX=$CXX"
+          FLAGS="-arch arm64 -isysroot $SDK -miphoneos-version-min=15.0 \
+                 -std=c++17 -O3 -DNDEBUG -fno-exceptions \
+                 -DUSE_PTHREADS -DIS_64BIT -DUSE_POPCNT -DUSE_NEON=8 -I. -w"
+          echo "=== sources ==="; find . -name '*.cpp' ! -path './universal/*' | sort
+          set -e
+          for f in $(find . -name '*.cpp' ! -path './universal/*'); do
+            echo "CC $f"
+            $CXX $FLAGS -c "$f" -o "$f.o"
+          done
+
+      - name: Build static library (the real phase-1 deliverable)
+        run: |
+          cd sf/src
+          ar rcs libstockfish.a $(find . -name '*.cpp.o' ! -name 'main.cpp.o')
+          ls -la libstockfish.a
+          echo "static lib size: $(du -h libstockfish.a | cut -f1)"
+          echo "exported text symbols:"; nm libstockfish.a 2>/dev/null | grep -c ' T ' || true
+          echo "looking for UCI/engine entry symbols:"
+          nm libstockfish.a 2>/dev/null | grep -iE 'uci|bench|main' | head -20 || true
+
+      - name: Try test executable (non-fatal — needs our own entry point)
+        continue-on-error: true
+        run: |
+          cd sf/src
+          SDK=$(xcrun -sdk iphoneos --show-sdk-path)
+          CXX=$(xcrun -sdk iphoneos -f clang++)
+          $CXX -arch arm64 -isysroot "$SDK" -miphoneos-version-min=15.0 \
+               $(find . -name '*.cpp.o') -o stockfish-ios && \
+          { file stockfish-ios; lipo -archs stockfish-ios; } || echo "exe link skipped (expected)"
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stockfish-ios-arm64
+          path: |
+            sf/src/stockfish-ios
+            sf/src/libstockfish.a
+          if-no-files-found: warn

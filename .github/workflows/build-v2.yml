@@ -1,0 +1,60 @@
+name: Build Chess Tweak v2 (local engine)
+
+on:
+  push:
+    branches: [ v2-engine ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Clone Stockfish 16 + fetch net
+        run: |
+          git clone --depth 1 --branch sf_16 https://github.com/official-stockfish/Stockfish.git sf
+          cd sf/src && make net && ls -la *.nnue
+
+      - name: Cross-compile Stockfish for iOS arm64 -> libstockfish.a
+        run: |
+          cd sf/src
+          SDK=$(xcrun -sdk iphoneos --show-sdk-path)
+          CXX=$(xcrun -sdk iphoneos -f clang++)
+          FLAGS="-arch arm64 -isysroot $SDK -miphoneos-version-min=15.0 \
+                 -std=c++17 -O3 -DNDEBUG -fno-exceptions \
+                 -DUSE_PTHREADS -DIS_64BIT -DUSE_POPCNT -DUSE_NEON=8 \
+                 -DUSE_INCBIN -I. -w"
+          set -e
+          for f in $(find . -name '*.cpp' ! -path './universal/*'); do
+            $CXX $FLAGS -c "$f" -o "$f.o"
+          done
+          ar rcs libstockfish.a $(find . -name '*.cpp.o' ! -name 'main.cpp.o')
+          echo "libstockfish.a: $(du -h libstockfish.a | cut -f1)"
+
+      - name: Setup Theos
+        uses: beerpiss/theos-action@v1
+        with:
+          cache: true
+
+      - name: Build .deb
+        run: make package FINALPACKAGE=1
+        env:
+          THEOS: ${{ github.workspace }}/theos
+
+      - name: Locate built dylib
+        run: |
+          DYLIB=$(find . -name 'Chess.dylib' -path '*obj*' | head -1)
+          echo "found: $DYLIB"
+          mkdir -p out && cp "$DYLIB" out/ && ls -la out/
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Chess-tweak-v2
+          path: |
+            packages/*.deb
+            out/Chess.dylib
+          if-no-files-found: warn
