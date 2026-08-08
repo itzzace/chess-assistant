@@ -2115,6 +2115,38 @@ static UIView *resolveDrawBoard(UIView *v) {
     return v;
 }
 
+static void probePuzzleFen(UIResponder *start) {
+    static BOOL done = NO;
+    if (done) return;
+    done = YES;
+    UIResponder *r = start;
+    for (int d = 0; d < 22 && r; d++, r = [r nextResponder]) {
+        Class c = [r class];
+        NSString *cn = NSStringFromClass(c);
+        unsigned int n = 0;
+        objc_property_t *ps = class_copyPropertyList(c, &n);
+        for (unsigned int i = 0; i < n; i++) {
+            NSString *pn = @(property_getName(ps[i]));
+            NSString *low = [pn lowercaseString];
+            if (![low containsString:@"fen"] && ![low containsString:@"pgn"] &&
+                ![low containsString:@"puzzle"] && ![low containsString:@"position"] &&
+                ![low containsString:@"board"] && ![low containsString:@"game"] &&
+                ![low containsString:@"move"]) continue;
+            SEL s = NSSelectorFromString(pn);
+            if (![r respondsToSelector:s]) continue;
+            @try {
+                id v = ((id (*)(id, SEL))objc_msgSend)(r, s);
+                NSString *desc = [v isKindOfClass:[NSString class]]
+                    ? (NSString *)v
+                    : (v ? NSStringFromClass([v class]) : @"nil");
+                if (desc.length > 60) desc = [desc substringToIndex:60];
+                dbg([NSString stringWithFormat:@"PZ %@.%@=%@", cn, pn, desc]);
+            } @catch (NSException *e) {}
+        }
+        if (ps) free(ps);
+    }
+}
+
 static void hook_layoutSubviews(id self, SEL _cmd) {
 
     Class c = [self class];
@@ -2414,6 +2446,7 @@ static void hook_layoutSubviews(id self, SEL _cmd) {
                 gLastFailChain = [chainLog copy];
                 gLastFailLog = [NSDate date];
                 dbg([NSString stringWithFormat:@"no game/FEN in chain: %@", chainLog]);
+                if ([chainLog containsString:@"Puzzle"]) probePuzzleFen((UIView *)self);
             }
             return;
         }
