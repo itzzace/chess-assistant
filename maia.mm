@@ -159,6 +159,7 @@ extern "C" void MaiaGo(const char *fen, int selfElo, int oppoElo, MaiaResultBloc
     res.ok = false;
     res.stage = 0;
     res.legalCount = 0;
+    res.err[0] = '\0';
 
     if (!gMaiaModel) { res.stage = 1; if (done) done(res); return; }
 
@@ -190,7 +191,12 @@ extern "C" void MaiaGo(const char *fen, int selfElo, int oppoElo, MaiaResultBloc
         if (!prov || err) { res.stage = 4; if (done) done(res); return; }
 
         id<MLFeatureProvider> out = [gMaiaModel predictionFromFeatures:prov error:&err];
-        if (!out || err) { res.stage = 5; if (done) done(res); return; }
+        if (!out || err) {
+            res.stage = 5;
+            if (err) std::strncpy(res.err, [err.localizedDescription UTF8String], 191);
+            if (done) done(res);
+            return;
+        }
 
         MLMultiArray *moveLogits = [out featureValueForName:@"move_logits"].multiArrayValue;
         MLMultiArray *valueLogits = [out featureValueForName:@"value_logits"].multiArrayValue;

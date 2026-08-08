@@ -1263,10 +1263,8 @@ static int eloNearestIndex(NSInteger e) {
     [_stack addArrangedSubview:[self group:grp]];
 
     NSMutableArray *swRows = [NSMutableArray array];
-    if (MaiaAvailable()) {
-        [swRows addObject:[self rowTitle:@"Maia (human-like)" control:[self switchOn:gUseMaia sel:@selector(swMaia:)]]];
-        [swRows addObject:[self sep]];
-    }
+    [swRows addObject:[self rowTitle:@"Maia (human-like)" control:[self switchOn:gUseMaia sel:@selector(swMaia:)]]];
+    [swRows addObject:[self sep]];
     [swRows addObject:[self rowTitle:@"Move Analysis" control:[self switchOn:gTrackQuality sel:@selector(swAnalysis:)]]];
     [swRows addObject:[self sep]];
     [swRows addObject:[self rowTitle:@"Eval Labels" control:[self switchOn:gShowEvalLabels sel:@selector(swLabels:)]]];
@@ -1502,7 +1500,7 @@ static void fetchMove(NSString *fen) {
             MaiaGo([fen UTF8String], (int)gElo, (int)gElo, ^(MaiaResult r) {
                 NSString *bm = r.ok ? [NSString stringWithUTF8String:r.move] : nil;
                 double rawWhite = r.whiteEval;
-                if (!r.ok) dbg([NSString stringWithFormat:@"maia stage=%d legal=%d", r.stage, r.legalCount]);
+                if (!r.ok) dbg([NSString stringWithFormat:@"maia stage=%d legal=%d err=%s", r.stage, r.legalCount, r.err]);
                 dispatch_async(dispatch_get_main_queue(), ^{
                     gFetching = NO;
                     if (gPendingFen && ![gPendingFen isEqualToString:gLastFen]) {

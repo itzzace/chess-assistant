@@ -7,6 +7,7 @@ typedef struct MaiaResult {
     bool ok;
     int stage;
     int legalCount;
+    char err[192];
 } MaiaResult;
 
 typedef void (^MaiaResultBlock)(MaiaResult res);
