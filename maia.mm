@@ -139,7 +139,7 @@ extern "C" bool MaiaLoad(const char *mlpackagePath) {
         if (!compiled || err) return false;
 
         MLModelConfiguration *cfg = [[MLModelConfiguration alloc] init];
-        cfg.computeUnits = MLComputeUnitsAll;
+        cfg.computeUnits = MLComputeUnitsCPUOnly;
         MLModel *m = [MLModel modelWithContentsOfURL:compiled configuration:cfg error:&err];
         if (!m || err) return false;
         gMaiaModel = m;
