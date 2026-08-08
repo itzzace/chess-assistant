@@ -1,0 +1,67 @@
+name: Build Chess Tweak (Maia)
+
+on:
+  push:
+    branches: [ maia ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Clone Stockfish 16 + fetch net
+        run: |
+          git clone --depth 1 --branch sf_16 https://github.com/official-stockfish/Stockfish.git sf
+          cd sf/src && make net && ls -la *.nnue
+
+      - name: Cross-compile Stockfish for iOS arm64 -> libstockfish.a
+        run: |
+          cd sf/src
+          SDK=$(xcrun -sdk iphoneos --show-sdk-path)
+          CXX=$(xcrun -sdk iphoneos -f clang++)
+          FLAGS="-arch arm64 -isysroot $SDK -miphoneos-version-min=15.0 \
+                 -std=c++17 -O3 -DNDEBUG -fno-exceptions \
+                 -DUSE_PTHREADS -DIS_64BIT -DUSE_POPCNT -DUSE_NEON=8 \
+                 -DUSE_INCBIN -I. -w"
+          set -e
+          for f in $(find . -name '*.cpp' ! -path './universal/*'); do
+            $CXX $FLAGS -c "$f" -o "$f.o"
+          done
+          ar rcs libstockfish.a $(find . -name '*.cpp.o' ! -name 'main.cpp.o')
+          echo "libstockfish.a: $(du -h libstockfish.a | cut -f1)"
+
+      - name: Fetch Maia CoreML model into layout
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "layout/Library/Application Support/Chess"
+          gh release download maia-model --repo "${{ github.repository }}" --pattern "maia3_5m.mlpackage.zip" --output model.zip
+          unzip -q model.zip -d "layout/Library/Application Support/Chess"
+          find "layout/Library/Application Support/Chess" -maxdepth 2 -print
+
+      - name: Setup Theos
+        uses: beerpiss/theos-action@v1
+        with:
+          cache: true
+
+      - name: Build .deb
+        run: make package FINALPACKAGE=1
+        env:
+          THEOS: ${{ github.workspace }}/theos
+
+      - name: Publish .deb as release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DEB=$(ls packages/*.deb | head -1)
+          echo "built: $DEB"
+          gh release delete maia-build --yes --cleanup-tag || true
+          gh release create maia-build "$DEB" \
+            --title "Chess Assistant (Maia) build" \
+            --notes "Tweak .deb with bundled Maia3 5M CoreML engine."

@@ -10,10 +10,13 @@
 #include <sstream>
 #include <cstring>
 
+#include <atomic>
+
 #include "bitboard.h"
 #include "endgame.h"
 #include "evaluate.h"
 #include "misc.h"
+#include "movegen.h"
 #include "position.h"
 #include "psqt.h"
 #include "search.h"
@@ -22,6 +25,8 @@
 #include "uci.h"
 
 using namespace Stockfish;
+
+static std::atomic<bool> gEngineReady{false};
 
 namespace {
 
@@ -212,6 +217,8 @@ void engineThread() {
     Search::clear();
     Eval::NNUE::init();
 
+    gEngineReady.store(true);
+
     gOut.setHandler(handleLine);
     std::cin.rdbuf(&gIn);
     std::cout.rdbuf(&gOut);
@@ -237,4 +244,29 @@ extern "C" void EngineGo(const char *fen, int depth, int elo, int multipv, Engin
     while (gQueue.size() >= 4) gQueue.pop_front();
     gQueue.push_back(Req{ std::string(fen), depth, elo, multipv, [done copy] });
     startNext_locked();
+}
+
+extern "C" int StockfishLegalMoves(const char *fen, char *out, int maxMoves) {
+    EngineStart();
+    for (int i = 0; i < 500 && !gEngineReady.load(); i++)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    if (!gEngineReady.load()) return 0;
+
+    Position pos;
+    StateInfo si;
+    try {
+        pos.set(std::string(fen), false, &si, Threads.main());
+    } catch (...) {
+        return 0;
+    }
+
+    int n = 0;
+    for (const auto &m : MoveList<LEGAL>(pos)) {
+        if (n >= maxMoves) break;
+        std::string u = UCI::move(pos, m);
+        std::strncpy(out + n * 6, u.c_str(), 5);
+        out[n * 6 + 5] = '\0';
+        n++;
+    }
+    return n;
 }

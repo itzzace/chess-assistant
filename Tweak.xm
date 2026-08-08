@@ -6,6 +6,7 @@
 #import <dlfcn.h>
 #import <malloc/malloc.h>
 #import "engine.h"
+#import "maia.h"
 
 #define PREF_ELO     @"ChessAssist_ELO"
 #define PREF_ENABLED @"ChessAssist_Enabled"
@@ -17,6 +18,7 @@
 #define PREF_EVALCLR @"ChessAssist_ArrowEvalColor"
 #define PREF_QUALITY @"ChessAssist_TrackQuality"
 #define PREF_EVALLBL @"ChessAssist_EvalLabels"
+#define PREF_USEMAIA @"ChessAssist_UseMaia"
 #define DEFAULT_ELO  800
 
 static NSInteger gElo     = DEFAULT_ELO;
@@ -50,6 +52,7 @@ static int    gQ[Q_COUNT] = {0};
 static double gQual2ndWhite = 0;
 static BOOL   gQualHave2nd = NO;
 static BOOL gShowEvalLabels = YES;
+static BOOL gUseMaia = NO;
 
 static NSMutableArray *gLog;
 static void dbg(NSString *msg) {
@@ -72,6 +75,7 @@ static void savePrefs(void) {
     [d setBool:gArrowEvalColor forKey:PREF_EVALCLR];
     [d setBool:gTrackQuality forKey:PREF_QUALITY];
     [d setBool:gShowEvalLabels forKey:PREF_EVALLBL];
+    [d setBool:gUseMaia forKey:PREF_USEMAIA];
     [d synchronize];
 }
 static void loadPrefs(void) {
@@ -85,6 +89,7 @@ static void loadPrefs(void) {
     if ([d objectForKey:PREF_EVALCLR]) gArrowEvalColor = [d boolForKey:PREF_EVALCLR];
     if ([d objectForKey:PREF_QUALITY]) gTrackQuality = [d boolForKey:PREF_QUALITY];
     if ([d objectForKey:PREF_EVALLBL]) gShowEvalLabels = [d boolForKey:PREF_EVALLBL];
+    if ([d objectForKey:PREF_USEMAIA]) gUseMaia = [d boolForKey:PREF_USEMAIA];
     if (gArrowCount < 1) gArrowCount = 1; if (gArrowCount > 3) gArrowCount = 3;
 }
 
@@ -1257,10 +1262,17 @@ static int eloNearestIndex(NSInteger e) {
     grp.axis = UILayoutConstraintAxisVertical; grp.spacing = 10;
     [_stack addArrangedSubview:[self group:grp]];
 
-    UIStackView *sw = [[UIStackView alloc] initWithArrangedSubviews:@[
-        [self rowTitle:@"Move Analysis" control:[self switchOn:gTrackQuality sel:@selector(swAnalysis:)]], [self sep],
-        [self rowTitle:@"Eval Labels" control:[self switchOn:gShowEvalLabels sel:@selector(swLabels:)]], [self sep],
-        [self rowTitle:@"Color by Eval" control:[self switchOn:gArrowEvalColor sel:@selector(swColor:)]]]];
+    NSMutableArray *swRows = [NSMutableArray array];
+    if (MaiaAvailable()) {
+        [swRows addObject:[self rowTitle:@"Maia (human-like)" control:[self switchOn:gUseMaia sel:@selector(swMaia:)]]];
+        [swRows addObject:[self sep]];
+    }
+    [swRows addObject:[self rowTitle:@"Move Analysis" control:[self switchOn:gTrackQuality sel:@selector(swAnalysis:)]]];
+    [swRows addObject:[self sep]];
+    [swRows addObject:[self rowTitle:@"Eval Labels" control:[self switchOn:gShowEvalLabels sel:@selector(swLabels:)]]];
+    [swRows addObject:[self sep]];
+    [swRows addObject:[self rowTitle:@"Color by Eval" control:[self switchOn:gArrowEvalColor sel:@selector(swColor:)]]];
+    UIStackView *sw = [[UIStackView alloc] initWithArrangedSubviews:swRows];
     sw.axis = UILayoutConstraintAxisVertical; sw.spacing = 10;
     [_stack addArrangedSubview:[self group:sw]];
 
@@ -1301,6 +1313,7 @@ static int eloNearestIndex(NSInteger e) {
 - (void)swAnalysis:(UISwitch *)s { gTrackQuality = s.on; savePrefs(); if (!s.on) resetAccuracy(); [self populate]; }
 - (void)swLabels:(UISwitch *)s { gShowEvalLabels = s.on; savePrefs(); redrawArrows(); }
 - (void)swColor:(UISwitch *)s { gArrowEvalColor = s.on; savePrefs(); redrawArrows(); }
+- (void)swMaia:(UISwitch *)s { gUseMaia = s.on; savePrefs(); gLastFen = nil; }
 - (void)enableTap { gEnabled = !gEnabled; savePrefs(); if (!gEnabled) clearArrow(); [self populate]; }
 - (void)debugTap {
     [self animateOut];
@@ -1480,11 +1493,36 @@ static void fetchMove(NSString *fen) {
 
     __block UIView *drawBoard = gDrawBoard ?: gBoardView;
 
+    BOOL stmWhite = ([fen rangeOfString:@" w "].location != NSNotFound);
+
+    if (gUseMaia && MaiaAvailable()) {
+        dbg([NSString stringWithFormat:@"maia elo%ld: %@", (long)gElo,
+             [fen substringToIndex:MIN(fen.length, 45)]]);
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+            MaiaGo([fen UTF8String], (int)gElo, (int)gElo, ^(MaiaResult r) {
+                NSString *bm = r.ok ? [NSString stringWithUTF8String:r.move] : nil;
+                double rawWhite = r.whiteEval;
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    gFetching = NO;
+                    if (gPendingFen && ![gPendingFen isEqualToString:gLastFen]) {
+                        NSString *next = [gPendingFen copy];
+                        gPendingFen = nil;
+                        dispatch_async(dispatch_get_main_queue(), ^{ fetchMove(next); });
+                    } else {
+                        gPendingFen = nil;
+                    }
+                    if (![snap isEqualToString:gLastFen]) { dbg(@"stale resp"); return; }
+                    if (!bm.length) { dbg(@"maia no move"); return; }
+                    applyEngineResult(bm, @[], NO, 0, rawWhite, drawBoard);
+                });
+            });
+        });
+        return;
+    }
+
     NSInteger depth = eloToDepth(gElo);
     dbg([NSString stringWithFormat:@"fetch d%ld: %@", (long)depth,
          [fen substringToIndex:MIN(fen.length, 45)]]);
-
-    BOOL stmWhite = ([fen rangeOfString:@" w "].location != NSNotFound);
 
     int multipv = gTrackQuality ? MAX((int)gArrowCount, 2) : (int)gArrowCount;
     EngineGo([fen UTF8String], (int)depth, (int)gElo, multipv,
@@ -2595,6 +2633,20 @@ static void installBoardHooks(void) {
     loadPrefs();
     dbg(@"loaded v2.2 (local SF16, 9-category grading)");
     EngineStart();
+
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        NSArray *candidates = @[
+            @"/var/jb/Library/Application Support/Chess/maia3_5m.mlpackage",
+            @"/Library/Application Support/Chess/maia3_5m.mlpackage",
+        ];
+        for (NSString *c in candidates) {
+            if ([[NSFileManager defaultManager] fileExistsAtPath:c]) {
+                BOOL ok = MaiaLoad([c UTF8String]);
+                dbg([NSString stringWithFormat:@"maia load %@: %@", ok ? @"OK" : @"FAIL", c]);
+                break;
+            }
+        }
+    });
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
