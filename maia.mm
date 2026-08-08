@@ -4,6 +4,7 @@
 #import <vector>
 #import <string>
 #import <unordered_map>
+#import <algorithm>
 
 static MLModel *gMaiaModel = nil;
 static std::vector<std::string> gMoves;
@@ -202,22 +203,32 @@ extern "C" void MaiaGo(const char *fen, int selfElo, int oppoElo, MaiaResultBloc
         MLMultiArray *valueLogits = [out featureValueForName:@"value_logits"].multiArrayValue;
         if (!moveLogits) { res.stage = 6; if (done) done(res); return; }
 
-        int bestIdx = -1;
-        double bestVal = -1e30;
+        struct Cand { double logit; std::string uci; };
+        std::vector<Cand> cands;
         for (int i = 0; i < legalCount; i++) {
             std::string uci(&legalBuf[i * 6]);
             std::string modelUci = sideBlack ? mirrorUci(uci) : uci;
             auto it = gMoveIdx.find(modelUci);
             if (it == gMoveIdx.end()) continue;
-            int idx = it->second;
-            double v = [[moveLogits objectAtIndexedSubscript:idx] doubleValue];
-            if (v > bestVal) { bestVal = v; bestIdx = idx; }
+            double v = [[moveLogits objectAtIndexedSubscript:it->second] doubleValue];
+            cands.push_back({v, uci});
         }
-        if (bestIdx < 0) { res.stage = 7; if (done) done(res); return; }
+        if (cands.empty()) { res.stage = 7; if (done) done(res); return; }
 
-        std::string modelBest = gMoves[bestIdx];
-        std::string realBest = sideBlack ? mirrorUci(modelBest) : modelBest;
-        std::strncpy(res.move, realBest.c_str(), 7);
+        std::sort(cands.begin(), cands.end(),
+                  [](const Cand &a, const Cand &b) { return a.logit > b.logit; });
+
+        double mx = cands[0].logit, sum = 0;
+        for (auto &c : cands) sum += exp(c.logit - mx);
+
+        int n = (int)cands.size(); if (n > 4) n = 4;
+        res.count = n;
+        for (int k = 0; k < n; k++) {
+            std::strncpy(res.moves[k], cands[k].uci.c_str(), 7);
+            res.moves[k][7] = '\0';
+            res.policy[k] = exp(cands[k].logit - mx) / sum;
+        }
+        std::strncpy(res.move, cands[0].uci.c_str(), 7);
         res.move[7] = '\0';
 
         double stmScore = 0;

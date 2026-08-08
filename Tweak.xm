@@ -1501,6 +1501,11 @@ static void fetchMove(NSString *fen) {
                 NSString *bm = r.ok ? [NSString stringWithUTF8String:r.move] : nil;
                 double rawWhite = r.whiteEval;
                 if (!r.ok) dbg([NSString stringWithFormat:@"maia stage=%d legal=%d err=%s", r.stage, r.legalCount, r.err]);
+                NSMutableArray *extras = [NSMutableArray array];
+                for (int i = 1; i < r.count && i < gArrowCount; i++) {
+                    [extras addObject:@{@"move": [NSString stringWithUTF8String:r.moves[i]],
+                                        @"label": [NSString stringWithFormat:@"%.0f%%", r.policy[i] * 100.0]}];
+                }
                 dispatch_async(dispatch_get_main_queue(), ^{
                     gFetching = NO;
                     if (gPendingFen && ![gPendingFen isEqualToString:gLastFen]) {
@@ -1512,7 +1517,7 @@ static void fetchMove(NSString *fen) {
                     }
                     if (![snap isEqualToString:gLastFen]) { dbg(@"stale resp"); return; }
                     if (!bm.length) { dbg(@"maia no move"); return; }
-                    applyEngineResult(bm, @[], NO, 0, rawWhite, drawBoard);
+                    applyEngineResult(bm, extras, NO, 0, rawWhite, drawBoard);
                 });
             });
         });

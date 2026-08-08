@@ -8,6 +8,9 @@ typedef struct MaiaResult {
     int stage;
     int legalCount;
     char err[192];
+    int count;
+    char moves[4][8];
+    double policy[4];
 } MaiaResult;
 
 typedef void (^MaiaResultBlock)(MaiaResult res);
