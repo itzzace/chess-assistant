@@ -2,7 +2,7 @@ name: Net Size Survey
 
 on:
   push:
-    branches: [ v2-engine ]
+    branches: [ main ]
     paths: [ '.github/workflows/net-survey.yml' ]
   workflow_dispatch:
 

@@ -2,7 +2,7 @@ name: Build Chess Tweak v2 (local engine)
 
 on:
   push:
-    branches: [ v2-engine ]
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:

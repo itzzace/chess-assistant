@@ -2,7 +2,7 @@ name: Engine Build Test
 
 on:
   push:
-    branches: [ v2-engine ]
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
