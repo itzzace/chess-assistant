@@ -263,7 +263,7 @@ extern "C" int StockfishLegalMoves(const char *fen, char *out, int maxMoves) {
     int n = 0;
     for (const auto &m : MoveList<LEGAL>(pos)) {
         if (n >= maxMoves) break;
-        std::string u = UCI::move(pos, m);
+        std::string u = UCI::move(m, false);
         std::strncpy(out + n * 6, u.c_str(), 5);
         out[n * 6 + 5] = '\0';
         n++;
