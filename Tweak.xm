@@ -2119,49 +2119,35 @@ static void probePuzzleFen(UIResponder *start) {
     static BOOL done = NO;
     if (done) return;
     done = YES;
-    UIResponder *r = start;
-    for (int d = 0; d < 22 && r; d++, r = [r nextResponder]) {
-        Class c = [r class];
-        NSString *cn = NSStringFromClass(c);
-        unsigned int n = 0;
-        objc_property_t *ps = class_copyPropertyList(c, &n);
-        for (unsigned int i = 0; i < n; i++) {
-            NSString *pn = @(property_getName(ps[i]));
-            NSString *low = [pn lowercaseString];
-            if (![low containsString:@"fen"] && ![low containsString:@"pgn"] &&
-                ![low containsString:@"puzzle"] && ![low containsString:@"position"] &&
-                ![low containsString:@"board"] && ![low containsString:@"game"] &&
-                ![low containsString:@"move"]) continue;
-            const char *attrs = property_getAttributes(ps[i]);
-            if (!attrs || attrs[0] != 'T' || attrs[1] != '@') continue;
-            SEL s = NSSelectorFromString(pn);
-            if (![r respondsToSelector:s]) continue;
-            @try {
-                id v = ((id (*)(id, SEL))objc_msgSend)(r, s);
-                NSString *desc = [v isKindOfClass:[NSString class]]
-                    ? (NSString *)v
-                    : (v ? NSStringFromClass([v class]) : @"nil");
-                if (desc.length > 60) desc = [desc substringToIndex:60];
-                dbg([NSString stringWithFormat:@"PZ %@.%@=%@", cn, pn, desc]);
-                if ([v isKindOfClass:[NSDictionary class]] && [pn isEqualToString:@"boardDictionary"]) {
-                    NSDictionary *d = (NSDictionary *)v;
-                    for (id key in d) {
-                        if (![key isKindOfClass:[NSString class]]) continue;
-                        NSString *sk = (NSString *)key;
-                        if (sk.length != 2) continue;
-                        unichar f = [sk characterAtIndex:0], rk = [sk characterAtIndex:1];
-                        if (f < 'a' || f > 'h' || rk < '1' || rk > '8') continue;
-                        id iv = d[key];
-                        NSString *al = @"", *ai = @"", *img = @"noimg";
-                        @try { if ([iv respondsToSelector:@selector(accessibilityLabel)]) al = [iv accessibilityLabel] ?: @""; } @catch (NSException *e) {}
-                        @try { if ([iv respondsToSelector:@selector(accessibilityIdentifier)]) ai = [iv accessibilityIdentifier] ?: @""; } @catch (NSException *e) {}
-                        @try { if ([iv respondsToSelector:@selector(image)] && ((id (*)(id, SEL))objc_msgSend)(iv, @selector(image))) img = @"img"; } @catch (NSException *e) {}
-                        dbg([NSString stringWithFormat:@"PZsq %@ al=%@ ai=%@ %@", sk, al, ai, img]);
-                    }
-                }
-            } @catch (NSException *e) {}
-        }
-        if (ps) free(ps);
+    if (![start isKindOfClass:[UIView class]]) return;
+    UIView *board = (UIView *)start;
+    CGFloat bw = board.bounds.size.width;
+    dbg([NSString stringWithFormat:@"PVboard w=%.0f", bw]);
+
+    NSMutableArray<UIView *> *stack = [NSMutableArray arrayWithObject:board];
+    int visited = 0;
+    while (stack.count && visited < 600) {
+        UIView *vw = [stack lastObject];
+        [stack removeLastObject];
+        visited++;
+        for (UIView *sub in vw.subviews) [stack addObject:sub];
+
+        if (![vw respondsToSelector:@selector(image)]) continue;
+        id im = nil;
+        @try { im = ((id (*)(id, SEL))objc_msgSend)(vw, @selector(image)); } @catch (NSException *e) {}
+        if (!im) continue;
+
+        NSString *al = vw.accessibilityLabel ?: @"";
+        NSString *ai = vw.accessibilityIdentifier ?: @"";
+        NSString *imn = @"";
+        @try {
+            SEL ss = NSSelectorFromString(@"imageName");
+            if ([im respondsToSelector:ss]) imn = ((id (*)(id, SEL))objc_msgSend)(im, ss) ?: @"";
+        } @catch (NSException *e) {}
+        CGRect f = [vw convertRect:vw.bounds toView:board];
+        dbg([NSString stringWithFormat:@"PV %@ al=%@ ai=%@ in=%@ c=%.0f,%.0f",
+             NSStringFromClass([vw class]), al, ai, imn,
+             CGRectGetMidX(f), CGRectGetMidY(f)]);
     }
 }
 
