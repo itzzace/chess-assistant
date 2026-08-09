@@ -1986,6 +1986,7 @@ static NSString *buildBotFEN(UIView *board, int *outUserColor) {
         const void *pvp = (__bridge const void *)pv;
         if (malloc_size(pvp) == 0) continue;
         if (pv.layer.animationKeys.count > 0) return nil;
+        if (pv.hidden || pv.alpha < 0.5) return nil;
 
         const uint8_t *pb = (const uint8_t *)pvp;
         Ivar pieceIv = class_getInstanceVariable([pv class], "piece");
@@ -1995,7 +1996,7 @@ static NSString *buildBotFEN(UIView *board, int *outUserColor) {
         if (color < 1 || color > 2 || type < 1 || type > 6) continue;
 
         Ivar ghostIv = class_getInstanceVariable([pv class], "isGhost");
-        if (ghostIv && *(pb + ivar_getOffset(ghostIv))) continue;
+        if (ghostIv && *(pb + ivar_getOffset(ghostIv))) return nil;
 
         CGRect f = [pv convertRect:pv.bounds toView:board];
         CGFloat cx = CGRectGetMidX(f), cy = CGRectGetMidY(f);
