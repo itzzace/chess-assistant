@@ -246,6 +246,26 @@ extern "C" void EngineGo(const char *fen, int depth, int elo, int multipv, Engin
     startNext_locked();
 }
 
+extern "C" bool StockfishFenLegal(const char *fen) {
+    EngineStart();
+    for (int i = 0; i < 500 && !gEngineReady.load(); i++)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    if (!gEngineReady.load()) return false;
+
+    Position pos;
+    StateInfo si;
+    try {
+        pos.set(std::string(fen), false, &si, Threads.main());
+    } catch (...) {
+        return false;
+    }
+    if (!pos.pieces(WHITE, KING) || !pos.pieces(BLACK, KING)) return false;
+    Color us = pos.side_to_move();
+    Square oksq = pos.square<KING>(~us);
+    if (pos.attackers_to(oksq) & pos.pieces(us)) return false;
+    return true;
+}
+
 extern "C" int StockfishLegalMoves(const char *fen, char *out, int maxMoves) {
     EngineStart();
     for (int i = 0; i < 500 && !gEngineReady.load(); i++)

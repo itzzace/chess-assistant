@@ -19,6 +19,8 @@ void EngineGo(const char *fen, int depth, int elo, int multipv, EngineResultBloc
 
 int StockfishLegalMoves(const char *fen, char *out, int maxMoves);
 
+bool StockfishFenLegal(const char *fen);
+
 #ifdef __cplusplus
 }
 #endif

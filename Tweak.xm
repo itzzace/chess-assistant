@@ -55,13 +55,26 @@ static BOOL gShowEvalLabels = YES;
 static BOOL gUseMaia = NO;
 
 static NSMutableArray *gLog;
+static NSString *gLogPath = nil;
 static void dbg(NSString *msg) {
     if (!gLog) gLog = [NSMutableArray array];
-    [gLog addObject:[NSString stringWithFormat:@"[%@] %@",
+    NSString *line = [NSString stringWithFormat:@"[%@] %@",
         [NSDateFormatter localizedStringFromDate:[NSDate date]
-            dateStyle:NSDateFormatterNoStyle timeStyle:NSDateFormatterMediumStyle], msg]];
+            dateStyle:NSDateFormatterNoStyle timeStyle:NSDateFormatterMediumStyle], msg];
+    [gLog addObject:line];
     NSLog(@"[ChessAssist] %@", msg);
     while (gLog.count > 80) [gLog removeObjectAtIndex:0];
+
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        gLogPath = [[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject]
+                    stringByAppendingPathComponent:@"chessassist.log"];
+        [@"" writeToFile:gLogPath atomically:NO encoding:NSUTF8StringEncoding error:nil];
+    });
+    if (gLogPath) {
+        FILE *fp = fopen(gLogPath.fileSystemRepresentation, "a");
+        if (fp) { fputs([line UTF8String], fp); fputc('\n', fp); fclose(fp); }
+    }
 }
 
 static void savePrefs(void) {
@@ -1488,6 +1501,7 @@ static BOOL fenHasBothKings(NSString *fen) {
 static void fetchMove(NSString *fen) {
     if (!gEnabled || !fen.length) return;
     if (!fenHasBothKings(fen)) return;
+    if (!StockfishFenLegal([fen UTF8String])) { dbg(@"skip illegal pos"); return; }
     if ([fen isEqualToString:gLastFen]) return;
 
     if (gFetching && gLastFetch && [[NSDate date] timeIntervalSinceDate:gLastFetch] > 5.0) {
