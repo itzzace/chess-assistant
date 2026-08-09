@@ -2143,6 +2143,17 @@ static void probePuzzleFen(UIResponder *start) {
                     : (v ? NSStringFromClass([v class]) : @"nil");
                 if (desc.length > 60) desc = [desc substringToIndex:60];
                 dbg([NSString stringWithFormat:@"PZ %@.%@=%@", cn, pn, desc]);
+                if ([v isKindOfClass:[NSDictionary class]]) {
+                    NSDictionary *d = (NSDictionary *)v;
+                    int k = 0;
+                    for (id key in d) {
+                        if (k++ >= 40) break;
+                        id val = d[key];
+                        NSString *vd = [val isKindOfClass:[NSString class]] ? val : NSStringFromClass([val class]);
+                        if (vd.length > 40) vd = [vd substringToIndex:40];
+                        dbg([NSString stringWithFormat:@"PZd %@ => %@", key, vd]);
+                    }
+                }
             } @catch (NSException *e) {}
         }
         if (ps) free(ps);
