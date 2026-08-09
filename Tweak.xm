@@ -1998,9 +1998,12 @@ static NSString *buildBotFEN(UIView *board, int *outUserColor) {
         if (ghostIv && *(pb + ivar_getOffset(ghostIv))) continue;
 
         CGRect f = [pv convertRect:pv.bounds toView:board];
-        int scol = (int)(CGRectGetMidX(f) / sq);
-        int srow = (int)(CGRectGetMidY(f) / sq);
+        CGFloat cx = CGRectGetMidX(f), cy = CGRectGetMidY(f);
+        int scol = (int)(cx / sq);
+        int srow = (int)(cy / sq);
         if (scol < 0 || scol > 7 || srow < 0 || srow > 7) continue;
+        if (fabs(cx - (scol * sq + sq / 2)) > sq * 0.35 ||
+            fabs(cy - (srow * sq + sq / 2)) > sq * 0.35) return nil;
 
         if (pcN < 64) {
             pcColor[pcN] = color; pcType[pcN] = type;
