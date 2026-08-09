@@ -2115,78 +2115,78 @@ static UIView *resolveDrawBoard(UIView *v) {
     return v;
 }
 
-static BOOL layerTreeHasContents(CALayer *ly, int depth) {
-    if (!ly || depth > 3) return NO;
-    if (ly.contents) return YES;
-    for (CALayer *sl in ly.sublayers)
-        if (layerTreeHasContents(sl, depth + 1)) return YES;
-    return NO;
-}
-
-static BOOL pieceWordLabel(NSString *al) {
-    NSString *l = [al lowercaseString];
-    return [l containsString:@"pawn"] || [l containsString:@"knight"] ||
-           [l containsString:@"bishop"] || [l containsString:@"rook"] ||
-           [l containsString:@"queen"] || [l containsString:@"king"];
-}
-
-static void probePuzzleFen(UIResponder *start) {
-    static int runs = 0;
-    static NSDate *last = nil;
-    if (runs > 10) return;
-    if (last && [[NSDate date] timeIntervalSinceDate:last] < 2.0) return;
-    last = [NSDate date];
-    runs++;
-
-    NSArray *fenSels = @[@"fen", @"currentFen", @"getCurrentFen", @"fenString",
-                         @"positionFen", @"currentPosition", @"pgn", @"puzzle", @"puzzleFen"];
-    UIResponder *rp = start;
-    for (int d = 0; d < 22 && rp; d++, rp = [rp nextResponder]) {
-        for (NSString *sn in fenSels) {
-            SEL sel = NSSelectorFromString(sn);
-            if (![rp respondsToSelector:sel]) continue;
-            @try {
-                id v = ((id (*)(id, SEL))objc_msgSend)(rp, sel);
-                NSString *desc = [v isKindOfClass:[NSString class]] ? v : (v ? NSStringFromClass([v class]) : @"nil");
-                if (desc.length > 70) desc = [desc substringToIndex:70];
-                dbg([NSString stringWithFormat:@"PZsel %@.%@=%@", NSStringFromClass([rp class]), sn, desc]);
-            } @catch (NSException *e) {}
-        }
-    }
-
-    if (![start isKindOfClass:[UIView class]]) return;
-    UIView *board = (UIView *)start;
+static NSString *buildPuzzleFENFromLabels(UIView *board) {
+    if (!board || !board.window) return nil;
     CGRect boardRect = [board convertRect:board.bounds toView:nil];
-    UIView *root = board.window ?: board;
-    dbg([NSString stringWithFormat:@"PVroot run=%d board=%.0f,%.0f w=%.0f",
-         runs, boardRect.origin.x, boardRect.origin.y, boardRect.size.width]);
+    if (boardRect.size.width < 40) return nil;
 
-    int logged = 0;
-    NSMutableArray<UIView *> *stack = [NSMutableArray arrayWithObject:root];
+    char bd[8][8];
+    memset(bd, 0, sizeof(bd));
+    int count = 0;
+
+    NSMutableArray<UIView *> *stack = [NSMutableArray arrayWithObject:board.window];
     int visited = 0;
-    while (stack.count && visited < 4000 && logged < 60) {
+    while (stack.count && visited < 5000) {
         UIView *vw = [stack lastObject];
         [stack removeLastObject];
         visited++;
         for (UIView *sub in vw.subviews) [stack addObject:sub];
 
-        NSString *cn = NSStringFromClass([vw class]);
-        NSString *al = @"";
-        @try { al = vw.accessibilityLabel ?: @""; } @catch (NSException *e) {}
-        BOOL pieceClass = [cn containsString:@"Piece"];
-        BOOL pieceLabel = pieceWordLabel(al);
-        BOOL hasContents = NO;
-        @try { hasContents = layerTreeHasContents(vw.layer, 0); } @catch (NSException *e) {}
+        NSString *al = nil;
+        @try { al = vw.accessibilityLabel; } @catch (NSException *e) {}
+        if (al.length < 7) continue;
+        BOOL white;
+        if ([al hasPrefix:@"White "]) white = YES;
+        else if ([al hasPrefix:@"Black "]) white = NO;
+        else continue;
+
+        NSString *rest = [al substringFromIndex:6];
+        if (rest.length < 3) continue;
+        NSString *sq = [rest substringFromIndex:rest.length - 2];
+        NSString *pieceName = [rest substringToIndex:rest.length - 2];
+        unichar ff = [sq characterAtIndex:0], rr = [sq characterAtIndex:1];
+        if (ff < 'a' || ff > 'h' || rr < '1' || rr > '8') continue;
+
         CGRect wf = [vw convertRect:vw.bounds toView:nil];
-        BOOL small = wf.size.width > 20 && wf.size.width < boardRect.size.width * 0.25;
-        BOOL inBoard = CGRectContainsPoint(boardRect, CGPointMake(CGRectGetMidX(wf), CGRectGetMidY(wf)));
-        if (!(pieceClass || pieceLabel || (hasContents && small && inBoard))) continue;
-        dbg([NSString stringWithFormat:@"PV %@ al=%@ ct=%d c=%.0f,%.0f w=%.0f",
-             cn, al, hasContents ? 1 : 0,
-             CGRectGetMidX(wf) - boardRect.origin.x, CGRectGetMidY(wf) - boardRect.origin.y,
-             wf.size.width]);
-        logged++;
+        if (!CGRectContainsPoint(boardRect, CGPointMake(CGRectGetMidX(wf), CGRectGetMidY(wf)))) continue;
+
+        char pc = 0;
+        if ([pieceName isEqualToString:@"Pawn"])   pc = 'P';
+        else if ([pieceName isEqualToString:@"Knight"]) pc = 'N';
+        else if ([pieceName isEqualToString:@"Bishop"]) pc = 'B';
+        else if ([pieceName isEqualToString:@"Rook"])   pc = 'R';
+        else if ([pieceName isEqualToString:@"Queen"])  pc = 'Q';
+        else if ([pieceName isEqualToString:@"King"])   pc = 'K';
+        else continue;
+        if (!white) pc = (char)tolower(pc);
+
+        int file = ff - 'a', rank = rr - '1';
+        bd[rank][file] = pc;
+        count++;
     }
+    if (count < 2) return nil;
+
+    NSMutableString *pl = [NSMutableString string];
+    for (int r = 7; r >= 0; r--) {
+        int e = 0;
+        for (int f = 0; f < 8; f++) {
+            char c = bd[r][f];
+            if (!c) { e++; }
+            else { if (e) { [pl appendFormat:@"%d", e]; e = 0; } [pl appendFormat:@"%c", c]; }
+        }
+        if (e) [pl appendFormat:@"%d", e];
+        if (r > 0) [pl appendString:@"/"];
+    }
+
+    NSMutableString *cas = [NSMutableString string];
+    if (bd[0][4] == 'K' && bd[0][7] == 'R') [cas appendString:@"K"];
+    if (bd[0][4] == 'K' && bd[0][0] == 'R') [cas appendString:@"Q"];
+    if (bd[7][4] == 'k' && bd[7][7] == 'r') [cas appendString:@"k"];
+    if (bd[7][4] == 'k' && bd[7][0] == 'r') [cas appendString:@"q"];
+    if (!cas.length) [cas setString:@"-"];
+
+    char side = (gMyColor == 1) ? 'b' : 'w';
+    return [NSString stringWithFormat:@"%@ %c %@ - 0 1", pl, side, cas];
 }
 
 static void hook_layoutSubviews(id self, SEL _cmd) {
@@ -2484,21 +2484,29 @@ static void hook_layoutSubviews(id self, SEL _cmd) {
             if (![chainLog isEqualToString:gLastFailChain]) shouldLog = YES;
             if (gLastFailLog && [[NSDate date] timeIntervalSinceDate:gLastFailLog] > 10.0) shouldLog = YES;
             if (!gLastFailLog) shouldLog = YES;
+            if ([chainLog containsString:@"Puzzle"]) {
+                NSString *pf = buildPuzzleFENFromLabels((UIView *)self);
+                if (pf.length) {
+                    parseFEN(pf);
+                    if (gMyColor >= 0 && gMyColor != gSide) {
+                        dispatch_async(dispatch_get_main_queue(), ^{ clearArrow(); });
+                        return;
+                    }
+                    static NSString *sLastPuzzleFen = nil;
+                    if (![pf isEqualToString:sLastPuzzleFen]) {
+                        sLastPuzzleFen = [pf copy];
+                        dbg([NSString stringWithFormat:@"PUZZLE FEN: %@", pf]);
+                    }
+                    gForcedFlip = -1;
+                    gDrawBoard = gOnlineDrawBoard ?: (UIView *)self;
+                    fetchMove(pf);
+                    return;
+                }
+            }
             if (shouldLog && chainLog.length) {
                 gLastFailChain = [chainLog copy];
                 gLastFailLog = [NSDate date];
                 dbg([NSString stringWithFormat:@"no game/FEN in chain: %@", chainLog]);
-                if ([chainLog containsString:@"Puzzle"]) {
-                    static BOOL sched = NO;
-                    if (!sched) {
-                        sched = YES;
-                        __weak UIView *ws = (UIView *)self;
-                        for (NSNumber *t in @[@1.0, @3.0, @6.0, @10.0, @15.0, @22.0]) {
-                            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(t.doubleValue * NSEC_PER_SEC)),
-                                           dispatch_get_main_queue(), ^{ if (ws) probePuzzleFen(ws); });
-                        }
-                    }
-                }
             }
             return;
         }
