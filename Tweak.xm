@@ -2132,22 +2132,19 @@ static void probePuzzleFen(UIResponder *start) {
         visited++;
         for (UIView *sub in vw.subviews) [stack addObject:sub];
 
-        if (![vw respondsToSelector:@selector(image)]) continue;
-        id im = nil;
-        @try { im = ((id (*)(id, SEL))objc_msgSend)(vw, @selector(image)); } @catch (NSException *e) {}
-        if (!im) continue;
-
-        NSString *al = vw.accessibilityLabel ?: @"";
-        NSString *ai = vw.accessibilityIdentifier ?: @"";
-        NSString *imn = @"";
-        @try {
-            SEL ss = NSSelectorFromString(@"imageName");
-            if ([im respondsToSelector:ss]) imn = ((id (*)(id, SEL))objc_msgSend)(im, ss) ?: @"";
-        } @catch (NSException *e) {}
+        NSString *cn = NSStringFromClass([vw class]);
+        NSString *al = @"";
+        @try { al = vw.accessibilityLabel ?: @""; } @catch (NSException *e) {}
+        BOOL squareLabel = (al.length == 2 &&
+                            [al characterAtIndex:0] >= 'a' && [al characterAtIndex:0] <= 'h' &&
+                            [al characterAtIndex:1] >= '1' && [al characterAtIndex:1] <= '8');
+        BOOL pieceClass = [cn containsString:@"Piece"];
+        BOOL hasContents = NO;
+        @try { hasContents = (vw.layer.contents != nil); } @catch (NSException *e) {}
+        if (!pieceClass && (al.length == 0 || squareLabel) && !hasContents) continue;
         CGRect f = [vw convertRect:vw.bounds toView:board];
-        dbg([NSString stringWithFormat:@"PV %@ al=%@ ai=%@ in=%@ c=%.0f,%.0f",
-             NSStringFromClass([vw class]), al, ai, imn,
-             CGRectGetMidX(f), CGRectGetMidY(f)]);
+        dbg([NSString stringWithFormat:@"PV %@ al=%@ contents=%d c=%.0f,%.0f",
+             cn, al, hasContents ? 1 : 0, CGRectGetMidX(f), CGRectGetMidY(f)]);
     }
 }
 
