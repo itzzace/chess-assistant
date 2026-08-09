@@ -1961,6 +1961,7 @@ static NSString *gLastBotPlacement = nil;
 static int       gBotSide = 0;
 static char      gPrevBotBoard[8][8];
 static BOOL      gHavePrevBoard = NO;
+static BOOL      gPuzzleCtx = NO;
 
 static NSString *buildBotFEN(UIView *board, int *outUserColor) {
     const uint8_t *base = (const uint8_t *)(__bridge const void *)board;
@@ -2050,9 +2051,12 @@ static NSString *buildBotFEN(UIView *board, int *outUserColor) {
         if (r > 0) [pl appendString:@"/"];
     }
 
+    if (gPuzzleCtx) gBotSide = flipped ? 1 : 0;
+
     NSString *startpos = @"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
     if (![pl isEqualToString:gLastBotPlacement]) {
-        if ([pl isEqualToString:startpos]) {
+        if (gPuzzleCtx) {
+        } else if ([pl isEqualToString:startpos]) {
             gBotSide = 0;
             if (gAccCount > 0) resetAccuracy();
         } else if (gHavePrevBoard) {
@@ -2103,12 +2107,15 @@ static BOOL processBotBoard(UIView *board) {
     gBotBoard = board;
 
     BOOL inBotGame = NO;
+    gPuzzleCtx = NO;
     UIResponder *pr = board;
     for (int pd = 0; pd < 14 && pr; pd++) {
         NSString *cn = NSStringFromClass([pr class]);
+        if ([cn containsString:@"Puzzle"] || [cn containsString:@"Tactics"]) {
+            inBotGame = YES; gPuzzleCtx = YES; break;
+        }
         if ([cn containsString:@"PlayBot"] || [cn containsString:@"Coach"] ||
-            [cn containsString:@"Lesson"] || [cn containsString:@"Puzzle"] ||
-            [cn containsString:@"Tactics"]) { inBotGame = YES; break; }
+            [cn containsString:@"Lesson"]) { inBotGame = YES; break; }
         pr = [pr nextResponder];
     }
     if (!inBotGame) return NO;
