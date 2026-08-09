@@ -1963,8 +1963,32 @@ static char      gPrevBotBoard[8][8];
 static BOOL      gHavePrevBoard = NO;
 static BOOL      gPuzzleCtx = NO;
 
+static BOOL boardInteracting(UIView *board) {
+    UIView *up = board;
+    for (int i = 0; i < 4 && up; i++, up = up.superview) {
+        for (UIGestureRecognizer *g in up.gestureRecognizers) {
+            UIGestureRecognizerState s = g.state;
+            if (s == UIGestureRecognizerStateBegan || s == UIGestureRecognizerStateChanged) return YES;
+        }
+    }
+    NSMutableArray<UIView *> *stack = [NSMutableArray arrayWithObject:board];
+    int visited = 0;
+    while (stack.count && visited < 250) {
+        UIView *vw = [stack lastObject];
+        [stack removeLastObject];
+        visited++;
+        for (UIView *sub in vw.subviews) [stack addObject:sub];
+        for (UIGestureRecognizer *g in vw.gestureRecognizers) {
+            UIGestureRecognizerState s = g.state;
+            if (s == UIGestureRecognizerStateBegan || s == UIGestureRecognizerStateChanged) return YES;
+        }
+    }
+    return NO;
+}
+
 static NSString *buildBotFEN(UIView *board, int *outUserColor) {
     const uint8_t *base = (const uint8_t *)(__bridge const void *)board;
+    if (boardInteracting(board)) return nil;
 
     Ivar povIv = class_getInstanceVariable([board class], "piecesOverlayView");
     ptrdiff_t povOff = povIv ? ivar_getOffset(povIv) : 408;
