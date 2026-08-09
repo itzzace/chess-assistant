@@ -1,8 +1,8 @@
-name: Build Chess Tweak (Maia)
+name: Build Chess Assistant
 
 on:
   push:
-    branches: [ maia ]
+    branches: [ main ]
   workflow_dispatch:
 
 permissions:
@@ -62,7 +62,7 @@ jobs:
         run: |
           DEB=$(ls packages/*.deb | head -1)
           echo "built: $DEB"
-          gh release delete maia-build --yes --cleanup-tag || true
-          gh release create maia-build "$DEB" \
-            --title "Chess Assistant (Maia) build" \
-            --notes "Tweak .deb with bundled Maia3 5M CoreML engine."
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest "$DEB" \
+            --title "Chess Assistant (latest)" \
+            --notes "Tweak .deb with bundled Stockfish 16 + Maia 3 engines."
