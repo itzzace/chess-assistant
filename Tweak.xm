@@ -2115,10 +2115,21 @@ static UIView *resolveDrawBoard(UIView *v) {
     return v;
 }
 
+static BOOL pieceWordLabel(NSString *al) {
+    NSString *l = [al lowercaseString];
+    return [l containsString:@"pawn"] || [l containsString:@"knight"] ||
+           [l containsString:@"bishop"] || [l containsString:@"rook"] ||
+           [l containsString:@"queen"] || [l containsString:@"king"];
+}
+
 static void probePuzzleFen(UIResponder *start) {
-    static BOOL done = NO;
-    if (done) return;
-    done = YES;
+    static int runs = 0;
+    static NSDate *last = nil;
+    if (runs > 10) return;
+    if (last && [[NSDate date] timeIntervalSinceDate:last] < 2.0) return;
+    last = [NSDate date];
+    runs++;
+
     NSArray *fenSels = @[@"fen", @"currentFen", @"getCurrentFen", @"fenString",
                          @"positionFen", @"currentPosition", @"pgn", @"puzzle", @"puzzleFen"];
     UIResponder *rp = start;
@@ -2137,25 +2148,15 @@ static void probePuzzleFen(UIResponder *start) {
 
     if (![start isKindOfClass:[UIView class]]) return;
     UIView *board = (UIView *)start;
-    CGFloat bw = board.bounds.size.width;
-    dbg([NSString stringWithFormat:@"PVboard w=%.0f", bw]);
+    CGRect boardRect = [board convertRect:board.bounds toView:nil];
+    UIView *root = board.window ?: board;
+    dbg([NSString stringWithFormat:@"PVroot run=%d board=%.0f,%.0f w=%.0f",
+         runs, boardRect.origin.x, boardRect.origin.y, boardRect.size.width]);
 
-    NSMutableArray *lstack = [NSMutableArray arrayWithObject:board.layer];
-    int lvisited = 0;
-    while (lstack.count && lvisited < 800) {
-        CALayer *ly = [lstack lastObject];
-        [lstack removeLastObject];
-        lvisited++;
-        for (CALayer *sl in ly.sublayers) [lstack addObject:sl];
-        if (!ly.contents) continue;
-        CGPoint c = [board.layer convertPoint:CGPointMake(CGRectGetMidX(ly.bounds), CGRectGetMidY(ly.bounds)) fromLayer:ly];
-        dbg([NSString stringWithFormat:@"PL %@ name=%@ c=%.0f,%.0f",
-             NSStringFromClass([ly class]), ly.name ?: @"", c.x, c.y]);
-    }
-
-    NSMutableArray<UIView *> *stack = [NSMutableArray arrayWithObject:board];
+    int logged = 0;
+    NSMutableArray<UIView *> *stack = [NSMutableArray arrayWithObject:root];
     int visited = 0;
-    while (stack.count && visited < 600) {
+    while (stack.count && visited < 4000 && logged < 60) {
         UIView *vw = [stack lastObject];
         [stack removeLastObject];
         visited++;
@@ -2164,16 +2165,19 @@ static void probePuzzleFen(UIResponder *start) {
         NSString *cn = NSStringFromClass([vw class]);
         NSString *al = @"";
         @try { al = vw.accessibilityLabel ?: @""; } @catch (NSException *e) {}
-        BOOL squareLabel = (al.length == 2 &&
-                            [al characterAtIndex:0] >= 'a' && [al characterAtIndex:0] <= 'h' &&
-                            [al characterAtIndex:1] >= '1' && [al characterAtIndex:1] <= '8');
         BOOL pieceClass = [cn containsString:@"Piece"];
+        BOOL pieceLabel = pieceWordLabel(al);
         BOOL hasContents = NO;
         @try { hasContents = (vw.layer.contents != nil); } @catch (NSException *e) {}
-        if (!pieceClass && (al.length == 0 || squareLabel) && !hasContents) continue;
-        CGRect f = [vw convertRect:vw.bounds toView:board];
-        dbg([NSString stringWithFormat:@"PV %@ al=%@ contents=%d c=%.0f,%.0f",
-             cn, al, hasContents ? 1 : 0, CGRectGetMidX(f), CGRectGetMidY(f)]);
+        CGRect wf = [vw convertRect:vw.bounds toView:nil];
+        BOOL small = wf.size.width > 20 && wf.size.width < boardRect.size.width * 0.2;
+        BOOL inBoard = CGRectContainsPoint(boardRect, CGPointMake(CGRectGetMidX(wf), CGRectGetMidY(wf)));
+        if (!(pieceClass || pieceLabel || (hasContents && small && inBoard))) continue;
+        dbg([NSString stringWithFormat:@"PV %@ al=%@ ct=%d c=%.0f,%.0f w=%.0f",
+             cn, al, hasContents ? 1 : 0,
+             CGRectGetMidX(wf) - boardRect.origin.x, CGRectGetMidY(wf) - boardRect.origin.y,
+             wf.size.width]);
+        logged++;
     }
 }
 
