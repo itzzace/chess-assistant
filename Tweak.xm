@@ -1475,8 +1475,19 @@ static void applyEngineResult(NSString *bestmove, NSArray *extraMoves, BOOL isMa
     }
 }
 
+static BOOL fenHasBothKings(NSString *fen) {
+    NSString *place = [[fen componentsSeparatedByString:@" "] firstObject];
+    int K = 0, k = 0;
+    for (NSUInteger i = 0; i < place.length; i++) {
+        unichar c = [place characterAtIndex:i];
+        if (c == 'K') K++; else if (c == 'k') k++;
+    }
+    return K == 1 && k == 1;
+}
+
 static void fetchMove(NSString *fen) {
     if (!gEnabled || !fen.length) return;
+    if (!fenHasBothKings(fen)) return;
     if ([fen isEqualToString:gLastFen]) return;
 
     if (gFetching && gLastFetch && [[NSDate date] timeIntervalSinceDate:gLastFetch] > 5.0) {
@@ -2164,7 +2175,15 @@ static NSString *buildPuzzleFENFromLabels(UIView *board) {
         bd[rank][file] = pc;
         count++;
     }
-    if (count < 2) return nil;
+    if (count < 2 || count > 32) return nil;
+
+    int wk = 0, bk = 0;
+    for (int r = 0; r < 8; r++)
+        for (int f = 0; f < 8; f++) {
+            if (bd[r][f] == 'K') wk++;
+            else if (bd[r][f] == 'k') bk++;
+        }
+    if (wk != 1 || bk != 1) return nil;
 
     NSMutableString *pl = [NSMutableString string];
     for (int r = 7; r >= 0; r--) {
@@ -2187,6 +2206,57 @@ static NSString *buildPuzzleFENFromLabels(UIView *board) {
 
     char side = (gMyColor == 1) ? 'b' : 'w';
     return [NSString stringWithFormat:@"%@ %c %@ - 0 1", pl, side, cas];
+}
+
+static void probeDaily(UIResponder *start) {
+    static int runs = 0;
+    static NSDate *last = nil;
+    if (runs > 6) return;
+    if (last && [[NSDate date] timeIntervalSinceDate:last] < 2.0) return;
+    last = [NSDate date];
+    runs++;
+
+    NSArray *sels = @[@"fen", @"currentFen", @"getCurrentFen", @"fenString", @"positionFen",
+                      @"pgn", @"puzzle", @"sideToMove", @"playerColor", @"orientation",
+                      @"boardOrientation", @"userColor", @"turn", @"toMove"];
+    UIResponder *rp = start;
+    for (int d = 0; d < 22 && rp; d++, rp = [rp nextResponder]) {
+        for (NSString *sn in sels) {
+            SEL s = NSSelectorFromString(sn);
+            if (![rp respondsToSelector:s]) continue;
+            @try {
+                id v = ((id (*)(id, SEL))objc_msgSend)(rp, s);
+                NSString *desc = [v isKindOfClass:[NSString class]] ? v : (v ? [v description] : @"nil");
+                if (desc.length > 60) desc = [desc substringToIndex:60];
+                dbg([NSString stringWithFormat:@"DPsel %@.%@=%@", NSStringFromClass([rp class]), sn, desc]);
+            } @catch (NSException *e) {}
+        }
+    }
+
+    if (![start isKindOfClass:[UIView class]]) return;
+    UIView *board = (UIView *)start;
+    CGRect br = [board convertRect:board.bounds toView:nil];
+    NSMutableArray<UIView *> *st = [NSMutableArray arrayWithObject:(board.window ?: board)];
+    int vis = 0, lg = 0;
+    while (st.count && vis < 5000 && lg < 40) {
+        UIView *vw = [st lastObject];
+        [st removeLastObject];
+        vis++;
+        for (UIView *sub in vw.subviews) [st addObject:sub];
+        NSString *al = nil;
+        @try { al = vw.accessibilityLabel; } @catch (NSException *e) {}
+        if (al.length < 2) continue;
+        NSString *low = [al lowercaseString];
+        if (!([low containsString:@"pawn"] || [low containsString:@"knight"] ||
+              [low containsString:@"bishop"] || [low containsString:@"rook"] ||
+              [low containsString:@"queen"] || [low containsString:@"king"])) continue;
+        CGRect wf = [vw convertRect:vw.bounds toView:nil];
+        if (!CGRectContainsPoint(br, CGPointMake(CGRectGetMidX(wf), CGRectGetMidY(wf)))) continue;
+        dbg([NSString stringWithFormat:@"DP %@ al=%@ c=%.0f,%.0f",
+             NSStringFromClass([vw class]), al,
+             CGRectGetMidX(wf) - br.origin.x, CGRectGetMidY(wf) - br.origin.y]);
+        lg++;
+    }
 }
 
 static void hook_layoutSubviews(id self, SEL _cmd) {
@@ -2486,6 +2556,7 @@ static void hook_layoutSubviews(id self, SEL _cmd) {
             if (!gLastFailLog) shouldLog = YES;
             if ([chainLog containsString:@"Puzzle"]) {
                 NSString *pf = buildPuzzleFENFromLabels((UIView *)self);
+                if (!pf.length && [chainLog containsString:@"DailyPuzzle"]) probeDaily((UIResponder *)self);
                 if (pf.length) {
                     parseFEN(pf);
                     if (gMyColor >= 0 && gMyColor != gSide) {
