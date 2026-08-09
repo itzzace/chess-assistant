@@ -2115,6 +2115,14 @@ static UIView *resolveDrawBoard(UIView *v) {
     return v;
 }
 
+static BOOL layerTreeHasContents(CALayer *ly, int depth) {
+    if (!ly || depth > 3) return NO;
+    if (ly.contents) return YES;
+    for (CALayer *sl in ly.sublayers)
+        if (layerTreeHasContents(sl, depth + 1)) return YES;
+    return NO;
+}
+
 static BOOL pieceWordLabel(NSString *al) {
     NSString *l = [al lowercaseString];
     return [l containsString:@"pawn"] || [l containsString:@"knight"] ||
@@ -2168,9 +2176,9 @@ static void probePuzzleFen(UIResponder *start) {
         BOOL pieceClass = [cn containsString:@"Piece"];
         BOOL pieceLabel = pieceWordLabel(al);
         BOOL hasContents = NO;
-        @try { hasContents = (vw.layer.contents != nil); } @catch (NSException *e) {}
+        @try { hasContents = layerTreeHasContents(vw.layer, 0); } @catch (NSException *e) {}
         CGRect wf = [vw convertRect:vw.bounds toView:nil];
-        BOOL small = wf.size.width > 20 && wf.size.width < boardRect.size.width * 0.2;
+        BOOL small = wf.size.width > 20 && wf.size.width < boardRect.size.width * 0.25;
         BOOL inBoard = CGRectContainsPoint(boardRect, CGPointMake(CGRectGetMidX(wf), CGRectGetMidY(wf)));
         if (!(pieceClass || pieceLabel || (hasContents && small && inBoard))) continue;
         dbg([NSString stringWithFormat:@"PV %@ al=%@ ct=%d c=%.0f,%.0f w=%.0f",
@@ -2480,7 +2488,17 @@ static void hook_layoutSubviews(id self, SEL _cmd) {
                 gLastFailChain = [chainLog copy];
                 gLastFailLog = [NSDate date];
                 dbg([NSString stringWithFormat:@"no game/FEN in chain: %@", chainLog]);
-                if ([chainLog containsString:@"Puzzle"]) probePuzzleFen((UIView *)self);
+                if ([chainLog containsString:@"Puzzle"]) {
+                    static BOOL sched = NO;
+                    if (!sched) {
+                        sched = YES;
+                        __weak UIView *ws = (UIView *)self;
+                        for (NSNumber *t in @[@1.0, @3.0, @6.0, @10.0, @15.0, @22.0]) {
+                            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(t.doubleValue * NSEC_PER_SEC)),
+                                           dispatch_get_main_queue(), ^{ if (ws) probePuzzleFen(ws); });
+                        }
+                    }
+                }
             }
             return;
         }
