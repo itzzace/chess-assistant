@@ -2016,6 +2016,11 @@ static NSString *buildBotFEN(UIView *board, int *outUserColor) {
     double wAvg = wN ? wSum / wN : 0.0;
     double bAvg = bN ? bSum / bN : 7.0;
     BOOL flipped = (wAvg < bAvg);
+    Ivar flipIv = class_getInstanceVariable([board class], "isFlipped");
+    if (flipIv) {
+        const uint8_t *bb = (const uint8_t *)(__bridge const void *)board;
+        flipped = (*(bb + ivar_getOffset(flipIv)) & 1) ? YES : NO;
+    }
 
     char bd[8][8];
     memset(bd, 0, sizeof(bd));
