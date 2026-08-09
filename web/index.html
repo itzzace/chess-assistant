@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chess Assistant</title>
+<style>
+:root {
+  --bg: #0e1116;
+  --panel: #161b22;
+  --panel-2: #1c232d;
+  --border: #262d38;
+  --text: #e6e9ef;
+  --dim: #8b95a5;
+  --accent: #7dd35f;
+  --accent-ink: #0e1116;
+  --board-l: #ebecd0;
+  --board-d: #6f9b52;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --sans: -apple-system, "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f4f5f0; --panel: #ffffff; --panel-2: #f0f1ea; --border: #dcdfd4;
+    --text: #1a1d22; --dim: #5c6472; --accent: #4f8a34; --accent-ink: #ffffff;
+  }
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: var(--sans); line-height: 1.6; -webkit-font-smoothing: antialiased; }
+a { color: inherit; }
+.wrap { max-width: 880px; margin: 0 auto; padding: 0 20px; }
+
+.hero { padding: 72px 0 40px; text-align: center; }
+.logo { width: 96px; height: 96px; margin: 0 auto 24px; border-radius: 22px; overflow: hidden;
+  display: grid; grid-template-columns: repeat(4,1fr); grid-template-rows: repeat(4,1fr);
+  box-shadow: 0 12px 40px rgba(0,0,0,.35); border: 1px solid var(--border); }
+.logo i { display: block; }
+.logo i:nth-child(odd) { background: var(--board-l); }
+.logo i:nth-child(even) { background: var(--board-d); }
+.piece { position: relative; margin-top: -84px; font-size: 52px; line-height: 1; filter: drop-shadow(0 6px 10px rgba(0,0,0,.4)); }
+h1 { font-size: 40px; font-weight: 700; letter-spacing: -.02em; margin: 40px 0 10px; }
+.tag { color: var(--dim); font-size: 17px; max-width: 540px; margin: 0 auto 28px; }
+.pill { display: inline-block; font-family: var(--mono); font-size: 12px; color: var(--accent);
+  border: 1px solid var(--border); background: var(--panel); padding: 4px 10px; border-radius: 999px; margin-bottom: 20px; }
+
+.cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 8px; }
+.btn { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px;
+  padding: 12px 20px; border-radius: 12px; text-decoration: none; border: 1px solid var(--border); transition: transform .08s ease; }
+.btn:active { transform: translateY(1px); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.btn.ghost { background: var(--panel); color: var(--text); }
+
+.section { padding: 40px 0; }
+.section h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .1em; color: var(--dim); margin-bottom: 18px; }
+
+.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+@media (max-width: 620px) { .grid { grid-template-columns: 1fr; } }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; }
+.card h3 { font-size: 15px; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+.card p { color: var(--dim); font-size: 14px; }
+
+.steps { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 8px 4px; }
+.step { display: flex; gap: 14px; padding: 14px 18px; align-items: flex-start; }
+.step + .step { border-top: 1px solid var(--border); }
+.step .n { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); background: var(--accent);
+  width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; flex-shrink: 0; font-weight: 700; }
+.step div p { color: var(--dim); font-size: 14px; }
+.step code { font-family: var(--mono); font-size: 12.5px; background: var(--panel-2); padding: 2px 6px; border-radius: 5px; color: var(--accent); }
+.repo-url { font-family: var(--mono); font-size: 13px; background: var(--panel-2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 14px; margin-top: 10px; word-break: break-all; display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+.copy { cursor: pointer; border: 1px solid var(--border); background: var(--panel); color: var(--text);
+  font-family: var(--mono); font-size: 12px; padding: 4px 10px; border-radius: 7px; flex-shrink: 0; }
+
+footer { color: var(--dim); font-size: 13px; text-align: center; padding: 40px 0 60px; border-top: 1px solid var(--border); margin-top: 24px; }
+footer a { color: var(--accent); text-decoration: none; }
+.warn { font-size: 12.5px; color: var(--dim); margin-top: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div class="logo"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <div class="piece">&#9822;</div>
+    <div class="pill">v2.3 &middot; Stockfish&nbsp;16 + Maia&nbsp;3</div>
+    <h1>Chess Assistant</h1>
+    <p class="tag">On-device move suggestions for Chess.com &mdash; best moves from Stockfish, or human-like moves from the Maia&nbsp;3 neural engine, drawn right on the board.</p>
+    <div class="cta">
+      <a class="btn primary" href="sileo://source/https://itzzace.github.io/chess-assistant/" id="addRepo">&plus; Add to Sileo</a>
+      <a class="btn ghost" href="https://github.com/itzzace/chess-assistant/releases/latest" id="dl">Download .deb</a>
+    </div>
+    <p class="warn">Requires a jailbroken device (rootless). Sideload IPA builds available on the releases page.</p>
+  </header>
+
+  <section class="section">
+    <h2>What it does</h2>
+    <div class="grid">
+      <div class="card"><h3>&#9822; Two engines</h3><p>Bundled Stockfish 16 for the strongest move, or Maia 3 for the move a human at your rating would actually play.</p></div>
+      <div class="card"><h3>&#127919; ELO-tuned</h3><p>Set strength from 400 to 3500. Maia conditions its predictions on the ELO you choose.</p></div>
+      <div class="card"><h3>&#10142; On-board arrows</h3><p>Suggestions drawn as arrows with eval or win-probability labels. Show 1&ndash;3 candidate moves at once.</p></div>
+      <div class="card"><h3>&#128200; Move analysis</h3><p>Chess.com-style grading &mdash; Brilliant to Blunder &mdash; with per-game accuracy tracking.</p></div>
+      <div class="card"><h3>&#128241; Everywhere</h3><p>Works in online games, bots, coach, daily puzzles, and the puzzle trainer.</p></div>
+      <div class="card"><h3>&#128274; Fully offline</h3><p>Everything runs on-device with CoreML. No network, no accounts, no data leaves your phone.</p></div>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>Install</h2>
+    <div class="steps">
+      <div class="step"><div class="n">1</div><div><strong>Add the repo</strong><p>Tap <em>Add to Sileo</em> above, or add this URL manually in Sileo &rarr; Sources.</p>
+        <div class="repo-url"><span id="repoText">https://itzzace.github.io/chess-assistant/</span><button class="copy" id="copyBtn">Copy</button></div></div></div>
+      <div class="step"><div class="n">2</div><div><strong>Install Chess Assistant</strong><p>Find it in the repo and install, then respring.</p></div></div>
+      <div class="step"><div class="n">3</div><div><strong>Open Chess.com</strong><p>Tap the floating <code>&#9822;</code> button &rarr; settings. Toggle <strong>Maia</strong> for human-like play, set your ELO, and start a game.</p></div></div>
+    </div>
+  </section>
+
+  <footer>
+    Open source on <a href="https://github.com/itzzace/chess-assistant">GitHub</a>.
+    Powered by <a href="https://stockfishchess.org">Stockfish</a> and <a href="https://github.com/CSSLab/maia3">Maia&nbsp;3</a>.
+  </footer>
+
+</div>
+<script>
+  var repo = "https://itzzace.github.io/chess-assistant/";
+  document.getElementById("copyBtn").addEventListener("click", function () {
+    navigator.clipboard.writeText(repo).then(function () {
+      var b = document.getElementById("copyBtn"); b.textContent = "Copied"; setTimeout(function(){ b.textContent = "Copy"; }, 1500);
+    });
+  });
+</script>
+</body>
+</html>

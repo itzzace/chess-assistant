@@ -1,0 +1,79 @@
+name: Repo
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dpkg-dev
+        run: sudo apt-get update && sudo apt-get install -y dpkg-dev
+
+      - name: Collect debs from releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p site/debs
+          for tag in $(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName -q '.[].tagName'); do
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern '*.deb' --dir site/debs --clobber || true
+          done
+          ls -la site/debs
+
+      - name: Build APT index
+        run: |
+          cd site
+          dpkg-scanpackages --multiversion debs > Packages
+          gzip -9kf Packages
+          date_now="$(date -Ru | sed 's/+0000/GMT/')"
+          {
+            echo "Origin: Chess Assistant"
+            echo "Label: Chess Assistant"
+            echo "Suite: stable"
+            echo "Version: 1.0"
+            echo "Codename: ios"
+            echo "Architectures: iphoneos-arm64"
+            echo "Components: main"
+            echo "Description: On-device Stockfish 16 + Maia 3 assistant for Chess.com"
+            echo "Date: $date_now"
+          } > Release
+          for algo in MD5Sum:md5sum SHA1:sha1sum SHA256:sha256sum; do
+            label="${algo%%:*}"; tool="${algo##*:}"
+            echo "$label:" >> Release
+            for file in Packages Packages.gz; do
+              echo " $($tool "$file" | cut -d' ' -f1) $(stat -c%s "$file") $file" >> Release
+            done
+          done
+          cat Release
+
+      - name: Landing page
+        run: |
+          cp web/index.html site/index.html
+          printf '' > site/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
