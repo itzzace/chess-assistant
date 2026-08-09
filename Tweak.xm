@@ -2132,6 +2132,8 @@ static void probePuzzleFen(UIResponder *start) {
                 ![low containsString:@"puzzle"] && ![low containsString:@"position"] &&
                 ![low containsString:@"board"] && ![low containsString:@"game"] &&
                 ![low containsString:@"move"]) continue;
+            const char *attrs = property_getAttributes(ps[i]);
+            if (!attrs || attrs[0] != 'T' || attrs[1] != '@') continue;
             SEL s = NSSelectorFromString(pn);
             if (![r respondsToSelector:s]) continue;
             @try {
