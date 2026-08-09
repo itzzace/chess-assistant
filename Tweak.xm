@@ -2230,6 +2230,30 @@ static void probeDaily(UIResponder *start) {
     last = [NSDate date];
     runs++;
 
+    Class ic = [start class];
+    for (int up = 0; up < 3 && ic; up++, ic = class_getSuperclass(ic)) {
+        unsigned int nv = 0;
+        Ivar *ivs = class_copyIvarList(ic, &nv);
+        for (unsigned int i = 0; i < nv; i++) {
+            NSString *n = @(ivar_getName(ivs[i]));
+            NSString *low = [n lowercaseString];
+            if (![low containsString:@"flip"] && ![low containsString:@"orient"] &&
+                ![low containsString:@"perspec"] && ![low containsString:@"rotat"] &&
+                ![low containsString:@"white"] && ![low containsString:@"bottom"] &&
+                ![low containsString:@"side"] && ![low containsString:@"color"]) continue;
+            const char *enc = ivar_getTypeEncoding(ivs[i]);
+            ptrdiff_t off = ivar_getOffset(ivs[i]);
+            const uint8_t *base = (const uint8_t *)(__bridge const void *)start;
+            NSString *val = @"?";
+            if (enc && (enc[0] == 'B' || enc[0] == 'c')) val = [NSString stringWithFormat:@"%d", *(base + off)];
+            else if (enc && enc[0] == 'q') val = [NSString stringWithFormat:@"%lld", *(long long *)(base + off)];
+            else if (enc && enc[0] == 'i') val = [NSString stringWithFormat:@"%d", *(int *)(base + off)];
+            dbg([NSString stringWithFormat:@"DIvar %@.%@ enc=%s val=%@",
+                 NSStringFromClass(ic), n, enc ? enc : "", val]);
+        }
+        if (ivs) free(ivs);
+    }
+
     NSArray *sels = @[@"fen", @"currentFen", @"getCurrentFen", @"fenString", @"positionFen",
                       @"pgn", @"puzzle", @"sideToMove", @"playerColor", @"orientation",
                       @"boardOrientation", @"userColor", @"turn", @"toMove"];
