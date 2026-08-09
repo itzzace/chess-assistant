@@ -2143,15 +2143,20 @@ static void probePuzzleFen(UIResponder *start) {
                     : (v ? NSStringFromClass([v class]) : @"nil");
                 if (desc.length > 60) desc = [desc substringToIndex:60];
                 dbg([NSString stringWithFormat:@"PZ %@.%@=%@", cn, pn, desc]);
-                if ([v isKindOfClass:[NSDictionary class]]) {
+                if ([v isKindOfClass:[NSDictionary class]] && [pn isEqualToString:@"boardDictionary"]) {
                     NSDictionary *d = (NSDictionary *)v;
-                    int k = 0;
                     for (id key in d) {
-                        if (k++ >= 40) break;
-                        id val = d[key];
-                        NSString *vd = [val isKindOfClass:[NSString class]] ? val : NSStringFromClass([val class]);
-                        if (vd.length > 40) vd = [vd substringToIndex:40];
-                        dbg([NSString stringWithFormat:@"PZd %@ => %@", key, vd]);
+                        if (![key isKindOfClass:[NSString class]]) continue;
+                        NSString *sk = (NSString *)key;
+                        if (sk.length != 2) continue;
+                        unichar f = [sk characterAtIndex:0], rk = [sk characterAtIndex:1];
+                        if (f < 'a' || f > 'h' || rk < '1' || rk > '8') continue;
+                        id iv = d[key];
+                        NSString *al = @"", *ai = @"", *img = @"noimg";
+                        @try { if ([iv respondsToSelector:@selector(accessibilityLabel)]) al = [iv accessibilityLabel] ?: @""; } @catch (NSException *e) {}
+                        @try { if ([iv respondsToSelector:@selector(accessibilityIdentifier)]) ai = [iv accessibilityIdentifier] ?: @""; } @catch (NSException *e) {}
+                        @try { if ([iv respondsToSelector:@selector(image)] && ((id (*)(id, SEL))objc_msgSend)(iv, @selector(image))) img = @"img"; } @catch (NSException *e) {}
+                        dbg([NSString stringWithFormat:@"PZsq %@ al=%@ ai=%@ %@", sk, al, ai, img]);
                     }
                 }
             } @catch (NSException *e) {}
