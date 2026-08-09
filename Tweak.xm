@@ -2119,10 +2119,39 @@ static void probePuzzleFen(UIResponder *start) {
     static BOOL done = NO;
     if (done) return;
     done = YES;
+    NSArray *fenSels = @[@"fen", @"currentFen", @"getCurrentFen", @"fenString",
+                         @"positionFen", @"currentPosition", @"pgn", @"puzzle", @"puzzleFen"];
+    UIResponder *rp = start;
+    for (int d = 0; d < 22 && rp; d++, rp = [rp nextResponder]) {
+        for (NSString *sn in fenSels) {
+            SEL sel = NSSelectorFromString(sn);
+            if (![rp respondsToSelector:sel]) continue;
+            @try {
+                id v = ((id (*)(id, SEL))objc_msgSend)(rp, sel);
+                NSString *desc = [v isKindOfClass:[NSString class]] ? v : (v ? NSStringFromClass([v class]) : @"nil");
+                if (desc.length > 70) desc = [desc substringToIndex:70];
+                dbg([NSString stringWithFormat:@"PZsel %@.%@=%@", NSStringFromClass([rp class]), sn, desc]);
+            } @catch (NSException *e) {}
+        }
+    }
+
     if (![start isKindOfClass:[UIView class]]) return;
     UIView *board = (UIView *)start;
     CGFloat bw = board.bounds.size.width;
     dbg([NSString stringWithFormat:@"PVboard w=%.0f", bw]);
+
+    NSMutableArray *lstack = [NSMutableArray arrayWithObject:board.layer];
+    int lvisited = 0;
+    while (lstack.count && lvisited < 800) {
+        CALayer *ly = [lstack lastObject];
+        [lstack removeLastObject];
+        lvisited++;
+        for (CALayer *sl in ly.sublayers) [lstack addObject:sl];
+        if (!ly.contents) continue;
+        CGPoint c = [board.layer convertPoint:CGPointMake(CGRectGetMidX(ly.bounds), CGRectGetMidY(ly.bounds)) fromLayer:ly];
+        dbg([NSString stringWithFormat:@"PL %@ name=%@ c=%.0f,%.0f",
+             NSStringFromClass([ly class]), ly.name ?: @"", c.x, c.y]);
+    }
 
     NSMutableArray<UIView *> *stack = [NSMutableArray arrayWithObject:board];
     int visited = 0;
