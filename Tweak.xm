@@ -1525,7 +1525,6 @@ static void fetchMove(NSString *fen) {
             MaiaGo([fen UTF8String], (int)gElo, (int)gElo, ^(MaiaResult r) {
                 NSString *bm = r.ok ? [NSString stringWithUTF8String:r.move] : nil;
                 double rawWhite = r.whiteEval;
-                if (!r.ok) dbg([NSString stringWithFormat:@"maia stage=%d legal=%d err=%s", r.stage, r.legalCount, r.err]);
                 NSMutableArray *extras = [NSMutableArray array];
                 for (int i = 1; i < r.count && i < gArrowCount; i++) {
                     [extras addObject:@{@"move": [NSString stringWithUTF8String:r.moves[i]],
@@ -2244,67 +2243,6 @@ static NSString *buildPuzzleFENFromLabels(UIView *board) {
     return [NSString stringWithFormat:@"%@ %c %@ - 0 1", pl, side, cas];
 }
 
-static void probeDaily(UIResponder *start) {
-    static int runs = 0;
-    static NSDate *last = nil;
-    if (runs > 6) return;
-    if (last && [[NSDate date] timeIntervalSinceDate:last] < 2.0) return;
-    last = [NSDate date];
-    runs++;
-
-    Class ic = [start class];
-    unsigned int nv = 0;
-    Ivar *ivs = class_copyIvarList(ic, &nv);
-    for (unsigned int i = 0; i < nv; i++) {
-        NSString *n = @(ivar_getName(ivs[i]));
-        const char *enc = ivar_getTypeEncoding(ivs[i]);
-        dbg([NSString stringWithFormat:@"DIvar %@ enc=%s", n, enc ? enc : ""]);
-    }
-    if (ivs) free(ivs);
-
-    NSArray *sels = @[@"fen", @"currentFen", @"getCurrentFen", @"fenString", @"positionFen",
-                      @"pgn", @"puzzle", @"sideToMove", @"playerColor", @"orientation",
-                      @"boardOrientation", @"userColor", @"turn", @"toMove"];
-    UIResponder *rp = start;
-    for (int d = 0; d < 22 && rp; d++, rp = [rp nextResponder]) {
-        for (NSString *sn in sels) {
-            SEL s = NSSelectorFromString(sn);
-            if (![rp respondsToSelector:s]) continue;
-            @try {
-                id v = ((id (*)(id, SEL))objc_msgSend)(rp, s);
-                NSString *desc = [v isKindOfClass:[NSString class]] ? v : (v ? [v description] : @"nil");
-                if (desc.length > 60) desc = [desc substringToIndex:60];
-                dbg([NSString stringWithFormat:@"DPsel %@.%@=%@", NSStringFromClass([rp class]), sn, desc]);
-            } @catch (NSException *e) {}
-        }
-    }
-
-    if (![start isKindOfClass:[UIView class]]) return;
-    UIView *board = (UIView *)start;
-    CGRect br = [board convertRect:board.bounds toView:nil];
-    NSMutableArray<UIView *> *st = [NSMutableArray arrayWithObject:(board.window ?: board)];
-    int vis = 0, lg = 0;
-    while (st.count && vis < 5000 && lg < 40) {
-        UIView *vw = [st lastObject];
-        [st removeLastObject];
-        vis++;
-        for (UIView *sub in vw.subviews) [st addObject:sub];
-        NSString *al = nil;
-        @try { al = vw.accessibilityLabel; } @catch (NSException *e) {}
-        if (al.length < 2) continue;
-        NSString *low = [al lowercaseString];
-        if (!([low containsString:@"pawn"] || [low containsString:@"knight"] ||
-              [low containsString:@"bishop"] || [low containsString:@"rook"] ||
-              [low containsString:@"queen"] || [low containsString:@"king"])) continue;
-        CGRect wf = [vw convertRect:vw.bounds toView:nil];
-        if (!CGRectContainsPoint(br, CGPointMake(CGRectGetMidX(wf), CGRectGetMidY(wf)))) continue;
-        dbg([NSString stringWithFormat:@"DP %@ al=%@ c=%.0f,%.0f",
-             NSStringFromClass([vw class]), al,
-             CGRectGetMidX(wf) - br.origin.x, CGRectGetMidY(wf) - br.origin.y]);
-        lg++;
-    }
-}
-
 static void hook_layoutSubviews(id self, SEL _cmd) {
 
     Class c = [self class];
@@ -2602,7 +2540,6 @@ static void hook_layoutSubviews(id self, SEL _cmd) {
             if (!gLastFailLog) shouldLog = YES;
             if ([chainLog containsString:@"Puzzle"]) {
                 NSString *pf = buildPuzzleFENFromLabels((UIView *)self);
-                if (!pf.length && [chainLog containsString:@"DailyPuzzle"]) probeDaily((UIResponder *)self);
                 if (pf.length) {
                     parseFEN(pf);
                     if (gMyColor >= 0 && gMyColor != gSide) {
@@ -2848,14 +2785,20 @@ static void installBoardHooks(void) {
     gLoadTime = [NSDate date];
     gOrigLayouts = [NSMutableDictionary dictionary];
     loadPrefs();
-    dbg(@"loaded v2.2 (local SF16, 9-category grading)");
+    dbg(@"loaded v2.3 (SF16 + Maia3)");
     EngineStart();
 
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
-        NSArray *candidates = @[
+        NSString *res = [[NSBundle mainBundle] resourcePath];
+        NSMutableArray *candidates = [@[
             @"/var/jb/Library/Application Support/Chess/maia3_5m.mlpackage",
             @"/Library/Application Support/Chess/maia3_5m.mlpackage",
-        ];
+        ] mutableCopy];
+        if (res) {
+            [candidates addObject:[res stringByAppendingPathComponent:@"maia3_5m.mlpackage"]];
+            [candidates addObject:[res stringByAppendingPathComponent:@"Chess/maia3_5m.mlpackage"]];
+            [candidates addObject:[res stringByAppendingPathComponent:@"Frameworks/Chess.dylib/maia3_5m.mlpackage"]];
+        }
         for (NSString *c in candidates) {
             if ([[NSFileManager defaultManager] fileExistsAtPath:c]) {
                 BOOL ok = MaiaLoad([c UTF8String]);

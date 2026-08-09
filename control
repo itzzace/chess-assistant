@@ -1,10 +1,10 @@
 Package: com.chess.assistant
 Name: Chess Assistant
 Depends: mobilesubstrate
-Version: 2.0
+Version: 2.3
 Architecture: iphoneos-arm64
-Description: ELO-capped chess move assistant using Lichess cloud eval.
-             Set strength from 800 to 2400 ELO via in-game menu.
-Maintainer: you
-Author: you
+Description: On-device chess move assistant with bundled Stockfish 16 and Maia 3 engines.
+             Human-like or best-move suggestions from 400 to 3500 ELO, arrows on the board.
+Maintainer: epic
+Author: epic
 Section: Tweaks

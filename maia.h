@@ -5,9 +5,6 @@ typedef struct MaiaResult {
     double winPct;
     double whiteEval;
     bool ok;
-    int stage;
-    int legalCount;
-    char err[192];
     int count;
     char moves[4][8];
     double policy[4];

@@ -158,11 +158,8 @@ extern "C" void MaiaGo(const char *fen, int selfElo, int oppoElo, MaiaResultBloc
     res.winPct = 0;
     res.whiteEval = 0;
     res.ok = false;
-    res.stage = 0;
-    res.legalCount = 0;
-    res.err[0] = '\0';
 
-    if (!gMaiaModel) { res.stage = 1; if (done) done(res); return; }
+    if (!gMaiaModel) { if (done) done(res); return; }
 
     std::string fenStr(fen);
     int sideBlack = 0;
@@ -172,14 +169,13 @@ extern "C" void MaiaGo(const char *fen, int selfElo, int oppoElo, MaiaResultBloc
 
     char legalBuf[256 * 6];
     int legalCount = StockfishLegalMoves(fen, legalBuf, 256);
-    res.legalCount = legalCount;
-    if (legalCount <= 0) { res.stage = 2; if (done) done(res); return; }
+    if (legalCount <= 0) { if (done) done(res); return; }
 
     @autoreleasepool {
         MLMultiArray *tokens = buildTokens(fen, sideBlack);
         MLMultiArray *se = scalarInt32(selfElo);
         MLMultiArray *oe = scalarInt32(oppoElo);
-        if (!tokens || !se || !oe) { res.stage = 3; if (done) done(res); return; }
+        if (!tokens || !se || !oe) { if (done) done(res); return; }
 
         NSDictionary *feats = @{
             @"tokens": [MLFeatureValue featureValueWithMultiArray:tokens],
@@ -189,19 +185,17 @@ extern "C" void MaiaGo(const char *fen, int selfElo, int oppoElo, MaiaResultBloc
         NSError *err = nil;
         MLDictionaryFeatureProvider *prov =
             [[MLDictionaryFeatureProvider alloc] initWithDictionary:feats error:&err];
-        if (!prov || err) { res.stage = 4; if (done) done(res); return; }
+        if (!prov || err) { if (done) done(res); return; }
 
         id<MLFeatureProvider> out = [gMaiaModel predictionFromFeatures:prov error:&err];
         if (!out || err) {
-            res.stage = 5;
-            if (err) std::strncpy(res.err, [err.localizedDescription UTF8String], 191);
             if (done) done(res);
             return;
         }
 
         MLMultiArray *moveLogits = [out featureValueForName:@"move_logits"].multiArrayValue;
         MLMultiArray *valueLogits = [out featureValueForName:@"value_logits"].multiArrayValue;
-        if (!moveLogits) { res.stage = 6; if (done) done(res); return; }
+        if (!moveLogits) { if (done) done(res); return; }
 
         struct Cand { double logit; std::string uci; };
         std::vector<Cand> cands;
@@ -213,7 +207,7 @@ extern "C" void MaiaGo(const char *fen, int selfElo, int oppoElo, MaiaResultBloc
             double v = [[moveLogits objectAtIndexedSubscript:it->second] doubleValue];
             cands.push_back({v, uci});
         }
-        if (cands.empty()) { res.stage = 7; if (done) done(res); return; }
+        if (cands.empty()) { if (done) done(res); return; }
 
         std::sort(cands.begin(), cands.end(),
                   [](const Cand &a, const Cand &b) { return a.logit > b.logit; });
@@ -245,7 +239,6 @@ extern "C" void MaiaGo(const char *fen, int selfElo, int oppoElo, MaiaResultBloc
             stmScore = (winP - lossP) * 4.0;
         }
         res.whiteEval = sideBlack ? -stmScore : stmScore;
-        res.stage = 100;
         res.ok = true;
     }
 
